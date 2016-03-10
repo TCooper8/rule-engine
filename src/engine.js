@@ -2,47 +2,52 @@
 
 let _ = require('monadjs')
 let stl = {
-  console: {
-    log: console.log
-  }
+  'console.log': console.log,
+  equals: { inline: (a, b) => a === b }
 }
 
 let lookupFunction = name => {
-  let fn = _.getNested(stl, name)
+  let fn = stl[name]
 
   if (fn === undefined) {
-    _.failwith(_.sprintf(
-      'Function %s is not a valid function name.',
-      name
-    ))
+    failwithf('Function %s is not a valid function name.')(name)
   }
 
   return fn
 }
 
+let resolveBlock = token => {
+
+}
+
 let resolveFunction = token => {
-  if (_.isArray(token)) {
+  if (typecheck(Array)(token)) {
     let head = token[0]
 
-    if (_.isString(head) && head.startsWith('@')) {
+    if (typecheck(String)(head) && head.startsWith('@')) {
       // This is a function call.
       let args = token.slice(1)
       let fn = lookupFunction(head.slice(1))
       let resArgs = _.map(Array)(resolveToken)(args)
 
-      // If any functions come back, this is not a constant expression.
-      let isConstant = _.find(Array)(_.isFunction)(resArgs).isSome()
+      if (fn.inline) {
+        fn = fn.inline
+        // If any functions come back, this is not a constant expression.
+        let isConstant = _.find(Array)(typecheck(Function))(resArgs).isNone()
 
-      if (isConstant) {
-        // Flat value.
-        return fn.apply(null, resArgs)
+        if (isConstant) {
+          // Flat value.
+          let res = fn.apply(null, resArgs)
+          return res
+          //return fn.inline.apply(null, resArgs)
+        }
       }
 
       // Not a constant expression, must be evaluated on runtime.
       return context => {
         let evalArgs =
           _.map(Array)
-          (f => _.isFunction(f) ? f(context) : f)
+          (f => typecheck(Function)(f) ? f(context) : f)
           (resArgs)
 
         return fn.apply(null, evalArgs)
@@ -54,7 +59,7 @@ let resolveFunction = token => {
     }
   }
   else {
-    if (_.isString(token) && token.startsWith('@')) {
+    if (typecheck(String)(token) && token.startsWith('@')) {
       let fn = lookupFunction(token.slice(1))
 
       // No args, invoke it as a value.
@@ -68,7 +73,7 @@ let resolveFunction = token => {
 }
 
 let resolveValue = token => {
-  if (_.isString(token) && token.startsWith('$')) {
+  if (typecheck(String)(token) && token.startsWith('$')) {
     // This value needs to be computed on runtime.
     let key = token.slice(1)
 
@@ -76,10 +81,15 @@ let resolveValue = token => {
       // Lookup the token on the symbol table.
       let tables = context.tables
       let value = _.find(Array)(t => {
-        return _.getNested(t, key)
+        return t[key] !== undefined
       })(tables)
+      .map(t => t[key])
 
-      return value
+      console.log('looked up %s', key)
+      if (value.isSome()) {
+        return value.get()
+      }
+      failwithf('ReferenceError: %s is not defined')(key)
     }
   }
 
@@ -88,16 +98,16 @@ let resolveValue = token => {
 }
 
 let resolveToken = token => {
-  return undefined
-    || resolveFunction(token)
-    || resolveValue(token)
+  let fn = resolveFunction(token)
+  if (fn !== undefined) return fn
+  else return resolveValue(token)
 }
 
 let compile = source => {
   let ast = JSON.parse(source)
   let res = resolveToken(ast)
 
-  if (_.isFunction(res)) {
+  if (typecheck(Function)(res)) {
     return context => {
       return res(context)
     }
@@ -107,10 +117,15 @@ let compile = source => {
   }
 }
 
-let rule = [ '@console.log', 'number = %s', '$x' ]
+//let rule = [ '@console.log', 'number = %s', '$x' ]
+let rule = [ '@equals', 4, '5' ]
 let fn = compile(JSON.stringify(rule))
+console.log('compiled')
 let res = fn({
-  tables: []
+  tables: [
+    { x: 5 }
+  ]
 })
 
+console.log('res')
 console.log(res)
