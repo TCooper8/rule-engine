@@ -1,0 +1,14 @@
+{
+  "name": "rule-engine",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "mocha --harmony --recursive test/"
+  },
+  "author": "Tyler Cooper",
+  "license": "ISC",
+  "dependencies": {
+    "monadjs": "file:../monadjs"
+  }
+}
